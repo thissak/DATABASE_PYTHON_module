@@ -34,6 +34,16 @@ class MyTreeWidget(QTreeWidget):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setDragEnabled(True)
+
+    def mouseDoubleClickEvent(self, event):
+        """더블 클릭 시 기본 노드 확장/축소 기능을 막고, 사용자 정의 이벤트만 실행"""
+        item = self.itemAt(event.pos())
+        if item:
+            # 부모 위젯(MainWindow)의 on_tree_item_double_clicked 호출
+            main_window = self.window()
+            if hasattr(main_window, "on_tree_item_double_clicked"):
+                main_window.on_tree_item_double_clicked(item, 0)
+        event.ignore()  # 기본 동작(노드 확장/축소) 방지
     
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
