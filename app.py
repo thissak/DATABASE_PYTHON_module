@@ -1,12 +1,11 @@
 import os
 import sys
-import time
 import subprocess
 import pandas as pd
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem,
     QTextEdit, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QMessageBox,
-    QRadioButton
+    QRadioButton, QGroupBox, QPushButton
 )
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal
@@ -14,7 +13,7 @@ from PyQt5.QtGui import QDesktopServices
 
 # modules.py에서 필요한 함수와 전역 변수 가져오기
 from modules import (
-    get_base_path, build_tree_view, image_dict, xml3d_dict, display_part_info
+    get_base_path, build_tree_view, image_dict, xml3d_dict, display_part_info, apply_tree_view_styles
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -82,7 +81,7 @@ class MyTreeWidget(QTreeWidget):
         return None
 
 # ─────────────────────────────────────────────────────────────
-# MainWindow: 트리뷰, 로그창, 이미지 패널 및 라디오 버튼 포함
+# MainWindow: 트리뷰, 로그창, 이미지 패널, 라디오 버튼 및 메모창 포함
 # ─────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -90,50 +89,81 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Parts Treeview + Drag&Drop + Image Panel")
         self.resize(1000, 1600)
         
-        self.df = None  # 엑셀 데이터 저장
+        self.df = None               # 엑셀 데이터 저장
         self.current_part_no = None  # 현재 선택된 파트넘버 저장
         
+        self.init_ui()
+    
+    def init_ui(self):
+        # 좌측: 트리뷰와 로그창
         self.tree = MyTreeWidget()
         self.tree.setColumnCount(1)
         self.tree.setHeaderLabels(["FA-50M FINAL ASSEMBLY VERSION POLAND"])
         self.tree.itemClicked.connect(self.on_tree_item_clicked)
         self.tree.itemDoubleClicked.connect(self.on_tree_item_double_clicked)
         
-        # 로그창 생성
         self.logText = QTextEdit()
         self.logText.setReadOnly(True)
         self.logText.setFixedHeight(300)
-        
-        # 이미지 패널 (ClickableLabel)
-        self.imageLabel = ClickableLabel("이미지가 여기에 표시됩니다.", self)
-        self.imageLabel.setAlignment(Qt.AlignHCenter | Qt.AlignCenter)
-        self.imageLabel.setStyleSheet("border: 1px solid gray;")
-        self.imageLabel.setFixedSize(400, 400)
-        self.imageLabel.clicked.connect(self.load_image_for_current_part)
-        
-        # 라디오 버튼 생성
-        self.radio_image = QRadioButton("Image")
-        self.radio_3dxml = QRadioButton("3DXML")
-        self.radio_image.setChecked(True)  # 기본값 Image
-        
-        radio_layout = QHBoxLayout()
-        radio_layout.addWidget(self.radio_image)
-        radio_layout.addWidget(self.radio_3dxml)
-        radio_container = QWidget()
-        radio_container.setLayout(radio_layout)
-        
-        # 레이아웃 구성
-        rightLayout = QVBoxLayout()
-        rightLayout.addWidget(self.imageLabel)
-        rightLayout.addWidget(radio_container)
-        rightWidget = QWidget()
-        rightWidget.setLayout(rightLayout)
         
         leftLayout = QVBoxLayout()
         leftLayout.addWidget(self.tree, stretch=3)
         leftLayout.addWidget(self.logText, stretch=1)
         leftWidget = QWidget()
         leftWidget.setLayout(leftLayout)
+        
+        # 우측: 이미지 패널, 라디오버튼, 메모창
+        self.imageLabel = ClickableLabel("이미지가 여기에 표시됩니다.", self)
+        self.imageLabel.setAlignment(Qt.AlignHCenter | Qt.AlignCenter)
+        self.imageLabel.setStyleSheet("border: 1px solid gray;")
+        self.imageLabel.setFixedSize(400, 400)
+        self.imageLabel.clicked.connect(self.load_image_for_current_part)
+        
+        # 공통 QGroupBox 스타일
+        qgroupbox_style = (
+            "QGroupBox { background-color: #f0f0f0; border: 1px solid gray; margin-top: 10px; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 0 3px; font-weight: bold; }"
+        )
+        
+        # 라디오 버튼 그룹
+        self.radio_image = QRadioButton("Image")
+        self.radio_3dxml = QRadioButton("3DXML")
+        self.radio_image.setChecked(True)
+        self.radio_image.toggled.connect(self.on_radio_image_clicked)
+        self.radio_3dxml.toggled.connect(self.on_radio_3dxml_clicked)
+        
+        self.radio_group = QGroupBox("Select mode")
+        self.radio_group.setStyleSheet(qgroupbox_style)
+        self.radio_group.setFixedHeight(150)
+        radio_layout = QHBoxLayout()
+        radio_layout.setContentsMargins(5, 5, 5, 5)
+        radio_layout.setSpacing(75)
+        radio_layout.addWidget(self.radio_image)
+        radio_layout.addWidget(self.radio_3dxml)
+        radio_layout.setAlignment(Qt.AlignCenter)
+        self.radio_group.setLayout(radio_layout)
+        
+        # 메모 그룹
+        self.memo_group = QGroupBox("Memo")
+        self.memo_group.setStyleSheet(qgroupbox_style)
+        memo_layout = QVBoxLayout()
+        self.memoText = QTextEdit()
+        self.memoText.setFixedHeight(450)
+        # QTextEdit 내부 텍스트 중앙 정렬
+        self.memoText.setStyleSheet("QTextEdit { text-align: left; }")
+        self.memoText.setAlignment(Qt.AlignLeft)
+        self.memoSaveButton = QPushButton("Save Memo")
+        self.memoSaveButton.clicked.connect(self.on_save_memo)
+        memo_layout.addWidget(self.memoText)
+        memo_layout.addWidget(self.memoSaveButton)
+        self.memo_group.setLayout(memo_layout)
+        
+        rightLayout = QVBoxLayout()
+        rightLayout.addWidget(self.imageLabel)
+        rightLayout.addWidget(self.radio_group)
+        rightLayout.addWidget(self.memo_group)
+        rightWidget = QWidget()
+        rightWidget.setLayout(rightLayout)
         
         mainLayout = QHBoxLayout()
         mainLayout.addWidget(leftWidget, stretch=4)
@@ -142,24 +172,28 @@ class MainWindow(QMainWindow):
         centralWidget.setLayout(mainLayout)
         self.setCentralWidget(centralWidget)
     
+    # ─────────────────────────────────────────────────────────────
+    # 슬롯 및 기타 메서드
+    # ─────────────────────────────────────────────────────────────
+    def on_radio_image_clicked(self, checked):
+        if checked:
+            apply_tree_view_styles(self.tree, "image")
+    
+    def on_radio_3dxml_clicked(self, checked):
+        if checked:
+            apply_tree_view_styles(self.tree, "3dxml")
+    
     def appendLog(self, message):
         self.logText.append(message)
     
     def on_tree_item_clicked(self, item, column):
-        """트리 노드 클릭 시 동작"""
         part_no = item.text(column).strip().upper()
-        self.current_part_no = part_no  # 현재 선택된 파트넘버 저장
-        
-        # Excel 메타데이터 출력
+        self.current_part_no = part_no
         display_part_info(part_no, self)
-        
-        # 클릭 시 이미지 표시
         self.load_image_for_current_part()
     
     def load_image_for_current_part(self):
-        """현재 선택된 파트넘버에 해당하는 이미지를 이미지 패널에 로드"""
         part_no = self.current_part_no
-        
         if part_no in image_dict:
             image_path = image_dict[part_no]
             if os.path.exists(image_path):
@@ -181,13 +215,10 @@ class MainWindow(QMainWindow):
         else:
             self.imageLabel.clear()
             self.imageLabel.setText("이미지가 없습니다.")
-
+    
     def on_tree_item_double_clicked(self, item, column):
-        """트리 노드 더블클릭 시 동작"""
         part_no = item.text(column).strip().upper()
-
         if self.radio_image.isChecked():
-            # 이미지 모드: 이미지 파일을 기본 뷰어로 열기
             if part_no in image_dict:
                 image_path = image_dict[part_no]
                 if os.path.exists(image_path):
@@ -196,14 +227,11 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "경고", "이미지 파일이 존재하지 않습니다.")
             else:
                 QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 이미지가 없습니다.")
-
         elif self.radio_3dxml.isChecked():
-            # 3DXML 모드: Windows 기본 연결 프로그램으로 실행
             if part_no in xml3d_dict:
                 xml_path = xml3d_dict[part_no]
                 if os.path.exists(xml_path):
                     try:
-                        # CMD에서 'start "" "전체 경로"'로 실행하던 방식을 그대로 사용
                         cmd = f'cmd /c start "" "{xml_path}"'
                         subprocess.run(cmd, shell=True, check=True)
                     except Exception as e:
@@ -212,22 +240,18 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "경고", "3DXML 파일이 존재하지 않습니다.")
             else:
                 QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 3DXML 파일이 없습니다.")
+    
+    def on_save_memo(self):
+        current_node = self.current_part_no if self.current_part_no else "None"
+        memo_content = self.memoText.toPlainText()
+        print(f"Current Node: {current_node}, Memo: {memo_content}")
+        self.appendLog(f"Saved Memo - Node: {current_node}, Memo: {memo_content}")
 
-
-
-
-
-
-
-# ─────────────────────────────────────────────────────────────
-# 메인 실행 함수
-# ─────────────────────────────────────────────────────────────
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     
-    # 엑셀 파일 로드
     base_path = get_base_path()
     excelfolder_path = os.path.join(base_path, "01_excel")
     excel_file_path = os.path.join(excelfolder_path, "data.xlsx")

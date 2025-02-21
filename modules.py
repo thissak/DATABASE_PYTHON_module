@@ -2,9 +2,8 @@ import os
 import sys
 import time
 import pandas as pd
-from PyQt5.QtWidgets import QTreeWidgetItem, QMessageBox  # QTreeWidgetItem import 추가
+from PyQt5.QtWidgets import QTreeWidgetItem, QMessageBox, QHeaderView  # QTreeWidgetItem import 추가
 from PyQt5.QtGui import QPixmap, QBrush, QColor
-from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 
@@ -14,7 +13,7 @@ from PyQt5.QtGui import QDesktopServices
 nodeCount = 0
 g_NodeDictionary = {}  # 파트넘버 -> 트리 아이템
 image_dict = {}        # 파트넘버 -> 이미지 파일 경로
-xml3d_dict = {}    # 3DXML 파일 경로 저장
+xml3d_dict = {}        # 3DXML 파일 경로 저장
 
 def get_base_path():
     """실행 파일(또는 스크립트)이 있는 폴더를 반환"""
@@ -22,7 +21,7 @@ def get_base_path():
         return os.path.dirname(sys.executable)
     return os.path.dirname(__file__)
 
-def build_xml3d_dict():
+def build_xml3d_dict(window):
     """
     02_3dxml 폴더에서 .3dxml 파일을 스캔하여,
     파일명 예: aaa_bbb_ccc_PARTNO.3dxml 의 형식이라고 가정하고,
@@ -34,7 +33,7 @@ def build_xml3d_dict():
     folder_path = os.path.join(base_path, "02_3dxml")  # 3DXML 파일 폴더
 
     if not os.path.exists(folder_path):
-        print(f"[build_xml3d_dict] 02_3dxml 폴더를 찾을 수 없습니다: {folder_path}")
+        window.appendLog(f"[build_xml3d_dict] 02_3dxml 폴더를 찾을 수 없습니다: {folder_path}")
         return
     
     for fname in os.listdir(folder_path):
@@ -45,12 +44,9 @@ def build_xml3d_dict():
                 part_number = os.path.splitext(file_parts[3])[0].upper()
                 if part_number not in xml3d_dict:
                     xml3d_dict[part_number] = os.path.join(folder_path, fname)
-    
-    print("[build_xml3d_dict] 3DXML 딕셔너리 생성 완료.")
-    print(f"[build_xml3d_dict] 총 3DXML 파일 수: {len(xml3d_dict)}")
+    # 개별 로그 출력 대신 build_tree_view()에서 최종 요약에 포함합니다.
 
-
-def build_image_dict():
+def build_image_dict(window):
     """
     00_image 폴더에서 PNG/JPG 파일을 스캔하여,
     파일명 예: aaa_bbb_ccc_PARTNO.png 의 형식이라고 가정하고,
@@ -62,7 +58,7 @@ def build_image_dict():
     folder_path = os.path.join(base_path, "00_image")
     
     if not os.path.exists(folder_path):
-        print(f"[build_image_dict] 00_image 폴더를 찾을 수 없습니다: {folder_path}")
+        window.appendLog(f"[build_image_dict] 00_image 폴더를 찾을 수 없습니다: {folder_path}")
         return
     
     for fname in os.listdir(folder_path):
@@ -74,10 +70,7 @@ def build_image_dict():
                 part_number = os.path.splitext(file_parts[3])[0]
                 if part_number not in image_dict:
                     image_dict[part_number] = os.path.join(folder_path, fname)
-    
-    print("[build_image_dict] 이미지 딕셔너리 생성 완료.")
-    print(f"[build_image_dict] 총 이미지 파일 수: {len(image_dict)}")
-
+    # 개별 로그 출력 대신 build_tree_view()에서 최종 요약에 포함합니다.
 
 def safe_int(value, default="nan"):
     """
@@ -156,19 +149,31 @@ def add_nodes_original(tree_widget, parent_item, dict_rel, node_keys):
         if not is_duplicate:
             add_nodes_original(tree_widget, child_item, dict_rel, node_keys)
 
-def apply_tree_view_styles(tree_widget):
+def apply_tree_view_styles(tree_widget, style):
     """
-    트리뷰에서 image_dict에 해당하는 노드는 볼드 및 빨간색 처리
+    라디오버튼 선택에 따라 트리뷰 스타일 적용
+    style: "image" 또는 "3dxml"
     """
     def recurse(item):
         part_no = item.text(0)
-        if part_no in image_dict:
-            font = item.font(0)
+        # 기본 스타일로 초기화 (볼드 해제 및 검정색)
+        font = item.font(0)
+        font.setBold(False)
+        item.setFont(0, font)
+        item.setForeground(0, QBrush(QColor(0, 0, 0)))
+        
+        if style == "image" and part_no in image_dict:
             font.setBold(True)
             item.setFont(0, font)
-            item.setForeground(0, QBrush(QColor(255, 0, 0)))
+            item.setForeground(0, QBrush(QColor(255, 0, 0)))  # 빨간색
+        elif style == "3dxml" and part_no in xml3d_dict:
+            font.setBold(True)
+            item.setFont(0, font)
+            item.setForeground(0, QBrush(QColor(0, 0, 255)))  # 파란색
+
         for i in range(item.childCount()):
             recurse(item.child(i))
+    
     for i in range(tree_widget.topLevelItemCount()):
         top_item = tree_widget.topLevelItem(i)
         recurse(top_item)
@@ -181,8 +186,9 @@ def build_tree_view(excel_path, window):
     global nodeCount, g_NodeDictionary
     start_time = time.time()
     
-    build_image_dict()
-    build_xml3d_dict()
+    # 이미지 및 3DXML 딕셔너리 생성 (내부에서는 딕셔너리만 생성)
+    build_image_dict(window)
+    build_xml3d_dict(window)
     
     df = pd.read_excel(excel_path, sheet_name="Sheet1")
     if "PartNo" in df.columns and "NextPart" in df.columns:
@@ -218,9 +224,17 @@ def build_tree_view(excel_path, window):
     root_key = list(final_roots)[0]
     
     window.tree.clear()
+    
+    # 헤더 마지막 컬럼 자동 확장 해제
+    header = window.tree.header()
+    header.setStretchLastSection(False)
+    header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+    
+    # 가로 스크롤바 필요시 표시
+    window.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    
     g_NodeDictionary = {}
     
-    from PyQt5.QtWidgets import QTreeWidgetItem  # 동적으로 가져오기
     root_item = QTreeWidgetItem(window.tree)
     root_item.setText(0, root_key)
     nodeCount += 1
@@ -229,13 +243,16 @@ def build_tree_view(excel_path, window):
     root_item.setExpanded(True)
     
     add_nodes_original(window.tree, root_item, dict_rel, node_keys)
-    apply_tree_view_styles(window.tree)
+    # 기본 스타일 적용 (예: 기본으로 이미지 스타일 적용)
+    apply_tree_view_styles(window.tree, "image")
     
+    # 최종 요약정보에 딕셔너리 정보 포함
     summary_log = "===== Operation Summary =====\n"
+    summary_log += f"총 이미지 파일 수: {len(image_dict)}\n"
+    summary_log += f"총 3DXML 파일 수: {len(xml3d_dict)}\n"
     summary_log += f"총 유효 파트 수: {total_parts}\n"
     summary_log += f"트리뷰에 추가된 전체 노드 수: {nodeCount}\n"
     window.appendLog(summary_log)
     
     elapsed_time = time.time() - start_time
     window.appendLog(f"트리뷰 생성시간: {elapsed_time:.2f} seconds")
-    print(f"트리뷰 생성시간: {elapsed_time:.2f} seconds")
