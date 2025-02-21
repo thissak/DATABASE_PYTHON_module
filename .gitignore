@@ -4,3 +4,6 @@
 *.db
 dist/*
 build/*
+00_image/*
+01_excel/*
+02_3dxml/*

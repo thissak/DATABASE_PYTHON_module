@@ -14,6 +14,7 @@ from PyQt5.QtGui import QDesktopServices
 nodeCount = 0
 g_NodeDictionary = {}  # 파트넘버 -> 트리 아이템
 image_dict = {}        # 파트넘버 -> 이미지 파일 경로
+xml3d_dict = {}    # 3DXML 파일 경로 저장
 
 def get_base_path():
     """실행 파일(또는 스크립트)이 있는 폴더를 반환"""
@@ -21,16 +22,43 @@ def get_base_path():
         return os.path.dirname(sys.executable)
     return os.path.dirname(__file__)
 
+def build_xml3d_dict():
+    """
+    02_3dxml 폴더에서 .3dxml 파일을 스캔하여,
+    파일명 예: aaa_bbb_ccc_PARTNO.3dxml 의 형식이라고 가정하고,
+    PARTNO를 추출하여 xml3d_dict[PARTNO] = 파일 경로 로 저장.
+    """
+    xml3d_dict.clear()  # 기존 데이터 초기화
+
+    base_path = get_base_path()  
+    folder_path = os.path.join(base_path, "02_3dxml")  # 3DXML 파일 폴더
+
+    if not os.path.exists(folder_path):
+        print(f"[build_xml3d_dict] 02_3dxml 폴더를 찾을 수 없습니다: {folder_path}")
+        return
+    
+    for fname in os.listdir(folder_path):
+        lower_name = fname.lower()
+        if lower_name.endswith(".3dxml"):
+            file_parts = fname.split("_")
+            if len(file_parts) >= 4:
+                part_number = os.path.splitext(file_parts[3])[0].upper()
+                if part_number not in xml3d_dict:
+                    xml3d_dict[part_number] = os.path.join(folder_path, fname)
+    
+    print("[build_xml3d_dict] 3DXML 딕셔너리 생성 완료.")
+    print(f"[build_xml3d_dict] 총 3DXML 파일 수: {len(xml3d_dict)}")
+
+
 def build_image_dict():
     """
-    00_image 폴더 내 PNG/JPG 파일을 스캔하여
-    파일명 형식: aaa_bbb_ccc_PARTNO.png
-    에서 PARTNO를 추출하여 image_dict[PARTNO] = 파일 경로로 저장
+    00_image 폴더에서 PNG/JPG 파일을 스캔하여,
+    파일명 예: aaa_bbb_ccc_PARTNO.png 의 형식이라고 가정하고,
+    PARTNO를 추출하여 image_dict[PARTNO] = 파일 경로 로 저장.
     """
-    global image_dict
-    image_dict = {}
+    image_dict.clear() 
     
-    base_path = get_base_path()
+    base_path = get_base_path()  # 실행 파일이 있는 폴더 기준으로 경로 설정
     folder_path = os.path.join(base_path, "00_image")
     
     if not os.path.exists(folder_path):
@@ -42,12 +70,14 @@ def build_image_dict():
         if lower_name.endswith(".png") or lower_name.endswith(".jpg"):
             file_parts = fname.split("_")
             if len(file_parts) >= 4:
-                part_number = file_parts[3]
+                # 파일 확장자를 제거하여 파트넘버를 추출합니다.
+                part_number = os.path.splitext(file_parts[3])[0]
                 if part_number not in image_dict:
                     image_dict[part_number] = os.path.join(folder_path, fname)
     
     print("[build_image_dict] 이미지 딕셔너리 생성 완료.")
     print(f"[build_image_dict] 총 이미지 파일 수: {len(image_dict)}")
+
 
 def safe_int(value, default="nan"):
     """
@@ -152,6 +182,7 @@ def build_tree_view(excel_path, window):
     start_time = time.time()
     
     build_image_dict()
+    build_xml3d_dict()
     
     df = pd.read_excel(excel_path, sheet_name="Sheet1")
     if "PartNo" in df.columns and "NextPart" in df.columns:
