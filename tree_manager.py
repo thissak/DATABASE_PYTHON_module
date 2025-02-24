@@ -176,38 +176,50 @@ def add_nodes_original(tree_widget, parent_item, dict_rel, node_keys):
             add_nodes_original(tree_widget, child_item, dict_rel, node_keys)
 
 def apply_tree_view_styles(tree_widget, style):
-    """
-    라디오버튼 선택에 따라 트리뷰 스타일 적용  
-    style: "image", "3dxml", "fbx" 중 하나
-    """
+    # 업데이트 중지 (렌더링 최적화)
+    tree_widget.setUpdatesEnabled(False)
+    
+    # 기본 QBrush와 조건별 QBrush, 파일 딕셔너리를 미리 설정
+    default_brush = QBrush(QColor(0, 0, 0))
+    if style == "image":
+        active_brush = QBrush(QColor(255, 0, 0))  # 빨간색
+        file_dict = files_dict["image"]
+    elif style == "3dxml":
+        active_brush = QBrush(QColor(0, 0, 255))  # 파란색
+        file_dict = files_dict["xml3d"]
+    elif style == "fbx":
+        active_brush = QBrush(QColor(0, 128, 0))  # 녹색
+        file_dict = files_dict["fbx"]
+    else:
+        active_brush = default_brush
+        file_dict = {}
+
     def recurse(item):
         part_no = item.text(0)
-        # 기본 스타일: 볼드 해제 및 검정색
+        # 미리 upper() 결과를 저장 (반복 호출 줄임)
+        part_no_upper = part_no.upper()
         font = item.font(0)
+        # 기본 스타일: 볼드 해제, 기본 색상 설정
         font.setBold(False)
         item.setFont(0, font)
-        item.setForeground(0, QBrush(QColor(0, 0, 0)))
+        item.setForeground(0, default_brush)
         
-        if style == "image" and part_no.upper() in files_dict["image"]:
+        # 파일 딕셔너리에 해당 파트가 있으면 스타일 적용
+        if part_no_upper in file_dict:
             font.setBold(True)
             item.setFont(0, font)
-            item.setForeground(0, QBrush(QColor(255, 0, 0)))  # 빨간색
-        elif style == "3dxml" and part_no.upper() in files_dict["xml3d"]:
-            font.setBold(True)
-            item.setFont(0, font)
-            item.setForeground(0, QBrush(QColor(0, 0, 255)))  # 파란색
-        elif style == "fbx" and part_no.upper() in files_dict["fbx"]:
-            font.setBold(True)
-            item.setFont(0, font)
-            item.setForeground(0, QBrush(QColor(0, 128, 0)))  # 녹색
+            item.setForeground(0, active_brush)
         
         for i in range(item.childCount()):
             recurse(item.child(i))
     
     for i in range(tree_widget.topLevelItemCount()):
-        top_item = tree_widget.topLevelItem(i)
-        recurse(top_item)
+        recurse(tree_widget.topLevelItem(i))
+    
     tree_widget.repaint()
+    # 업데이트 다시 활성화
+    tree_widget.setUpdatesEnabled(True)
+
 
 def build_tree_view(excel_path, window):
     """
