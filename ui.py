@@ -92,12 +92,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Parts Treeview + Drag&Drop + Image Panel")
         self.resize(1000, 1600)
-        
         self.current_part_no = None   # 현재 선택된 파트넘버
         self.memo_data = {}           # 메모 저장용 딕셔너리 (파트번호: 메모)
         self.json_file_path = None    # JSON 파일 경로
         self.df = None                # Excel 데이터 (나중에 build_tree_view에서 설정)
-        
         self.init_ui()
     
     def init_ui(self):
@@ -131,7 +129,7 @@ class MainWindow(QMainWindow):
             "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 0 3px; font-weight: bold; }"
         )
         
-        # 라디오 버튼 그룹 (Image, 3DXML, FBX)
+        # 라디오 버튼 그룹 (Image, 3DXML, FBX) + 토글형 Filter 버튼 추가
         self.radio_image = QRadioButton("Image")
         self.radio_3dxml = QRadioButton("3DXML")
         self.radio_fbx = QRadioButton("FBX")
@@ -140,15 +138,20 @@ class MainWindow(QMainWindow):
         self.radio_3dxml.toggled.connect(self.on_radio_3dxml_clicked)
         self.radio_fbx.toggled.connect(self.on_radio_fbx_clicked)
         
+        self.filter_button = QPushButton("Filter")
+        self.filter_button.setCheckable(True)
+        self.filter_button.toggled.connect(self.on_filter_button_toggled)
+        
         self.radio_group = QGroupBox("Select mode")
         self.radio_group.setStyleSheet(qgroupbox_style)
         self.radio_group.setFixedHeight(150)
         radio_layout = QHBoxLayout()
         radio_layout.setContentsMargins(5, 5, 5, 5)
-        radio_layout.setSpacing(50)
+        radio_layout.setSpacing(75)
         radio_layout.addWidget(self.radio_image)
         radio_layout.addWidget(self.radio_3dxml)
         radio_layout.addWidget(self.radio_fbx)
+        radio_layout.addWidget(self.filter_button)  # 토글형 Filter 버튼 추가
         radio_layout.setAlignment(Qt.AlignCenter)
         self.radio_group.setLayout(radio_layout)
         
@@ -179,6 +182,49 @@ class MainWindow(QMainWindow):
         centralWidget = QWidget()
         centralWidget.setLayout(mainLayout)
         self.setCentralWidget(centralWidget)
+    
+    # 필터 적용 함수: 현재 모드에 따라 노드를 숨기거나 보임 처리
+    def filter_tree_items(self, tree_widget, mode):
+        def filter_item(item):
+            part_no = item.text(0).upper()
+            visible_child = False
+            for i in range(item.childCount()):
+                if filter_item(item.child(i)):
+                    visible_child = True
+            visible_self = part_no in files_dict[mode]
+            visible = visible_self or visible_child
+            item.setHidden(not visible)
+            return visible
+        for i in range(tree_widget.topLevelItemCount()):
+            filter_item(tree_widget.topLevelItem(i))
+    
+    # 필터 해제 함수: 트리의 모든 노드를 보이도록 설정
+    def clear_tree_filter(self, tree_widget):
+        def clear_item(item):
+            item.setHidden(False)
+            for i in range(item.childCount()):
+                clear_item(item.child(i))
+        for i in range(tree_widget.topLevelItemCount()):
+            clear_item(tree_widget.topLevelItem(i))
+    
+    # Filter 버튼 토글 슬롯
+    def on_filter_button_toggled(self, checked):
+        if checked:
+            # 버튼이 눌리면 현재 선택 모드에 따라 필터 적용
+            if self.radio_image.isChecked():
+                mode = "image"
+            elif self.radio_3dxml.isChecked():
+                mode = "xml3d"
+            elif self.radio_fbx.isChecked():
+                mode = "fbx"
+            else:
+                mode = "image"
+            self.filter_tree_items(self.tree, mode)
+            self.appendLog(f"Filter applied: {mode}")
+        else:
+            # 버튼이 해제되면 필터 해제 (모든 노드 보이기)
+            self.clear_tree_filter(self.tree)
+            self.appendLog("Filter cleared")
     
     # JSON 로드/저장 메서드
     def load_memo_data(self):
