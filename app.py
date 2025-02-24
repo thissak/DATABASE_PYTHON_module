@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import subprocess
 import pandas as pd
 from PyQt5.QtWidgets import (
@@ -13,7 +14,7 @@ from PyQt5.QtGui import QDesktopServices
 
 # modules.py에서 필요한 함수와 전역 변수 가져오기
 from modules import (
-    get_base_path, build_tree_view, image_dict, xml3d_dict, display_part_info, apply_tree_view_styles
+    get_base_path, build_tree_view, files_dict, display_part_info, apply_tree_view_styles
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -39,7 +40,6 @@ class MyTreeWidget(QTreeWidget):
         """더블 클릭 시 기본 노드 확장/축소 기능을 막고, 사용자 정의 이벤트만 실행"""
         item = self.itemAt(event.pos())
         if item:
-            # 부모 위젯(MainWindow)의 on_tree_item_double_clicked 호출
             main_window = self.window()
             if hasattr(main_window, "on_tree_item_double_clicked"):
                 main_window.on_tree_item_double_clicked(item, 0)
@@ -99,8 +99,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Parts Treeview + Drag&Drop + Image Panel")
         self.resize(1000, 1600)
         
-        self.df = None               # 엑셀 데이터 저장
-        self.current_part_no = None  # 현재 선택된 파트넘버 저장
+        self.current_part_no = None  # 현재 선택된 파트넘버
+        
+        # 메모 데이터(파트번호: 메모)를 저장할 딕셔너리
+        self.memo_data = {}
+        # JSON 파일 경로
+        self.json_file_path = None
         
         self.init_ui()
     
@@ -135,12 +139,14 @@ class MainWindow(QMainWindow):
             "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 0 3px; font-weight: bold; }"
         )
         
-        # 라디오 버튼 그룹
+        # 라디오 버튼 그룹 (Image, 3DXML, FBX)
         self.radio_image = QRadioButton("Image")
         self.radio_3dxml = QRadioButton("3DXML")
+        self.radio_fbx = QRadioButton("FBX")
         self.radio_image.setChecked(True)
         self.radio_image.toggled.connect(self.on_radio_image_clicked)
         self.radio_3dxml.toggled.connect(self.on_radio_3dxml_clicked)
+        self.radio_fbx.toggled.connect(self.on_radio_fbx_clicked)
         
         self.radio_group = QGroupBox("Select mode")
         self.radio_group.setStyleSheet(qgroupbox_style)
@@ -150,6 +156,7 @@ class MainWindow(QMainWindow):
         radio_layout.setSpacing(75)
         radio_layout.addWidget(self.radio_image)
         radio_layout.addWidget(self.radio_3dxml)
+        radio_layout.addWidget(self.radio_fbx)
         radio_layout.setAlignment(Qt.AlignCenter)
         self.radio_group.setLayout(radio_layout)
         
@@ -159,7 +166,6 @@ class MainWindow(QMainWindow):
         memo_layout = QVBoxLayout()
         self.memoText = QTextEdit()
         self.memoText.setFixedHeight(450)
-        # QTextEdit 내부 텍스트 중앙 정렬
         self.memoText.setStyleSheet("QTextEdit { text-align: left; }")
         self.memoText.setAlignment(Qt.AlignLeft)
         self.memoSaveButton = QPushButton("Save Memo")
@@ -181,7 +187,33 @@ class MainWindow(QMainWindow):
         centralWidget = QWidget()
         centralWidget.setLayout(mainLayout)
         self.setCentralWidget(centralWidget)
-    
+
+    # ─────────────────────────────────────────────────────────────
+    # JSON 로드/저장 메서드
+    # ─────────────────────────────────────────────────────────────
+    def load_memo_data(self):
+        """
+        JSON 파일이 없으면 생성하고,
+        있으면 불러와서 self.memo_data 딕셔너리에 저장
+        """
+        if not os.path.exists(self.json_file_path):
+            with open(self.json_file_path, 'w', encoding='utf-8') as f:
+                json.dump({}, f, ensure_ascii=False, indent=4)
+            self.memo_data = {}
+        else:
+            with open(self.json_file_path, 'r', encoding='utf-8') as f:
+                self.memo_data = json.load(f)
+
+    def save_memo_data(self):
+        """
+        self.memo_data를 JSON 파일로 저장
+        """
+        try:
+            with open(self.json_file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.memo_data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            QMessageBox.critical(self, "에러", f"JSON 파일 저장 중 오류: {str(e)}")
+
     # ─────────────────────────────────────────────────────────────
     # 슬롯 및 기타 메서드
     # ─────────────────────────────────────────────────────────────
@@ -193,19 +225,34 @@ class MainWindow(QMainWindow):
         if checked:
             apply_tree_view_styles(self.tree, "3dxml")
     
+    def on_radio_fbx_clicked(self, checked):
+        if checked:
+            apply_tree_view_styles(self.tree, "fbx")
+    
     def appendLog(self, message):
         self.logText.append(message)
     
     def on_tree_item_clicked(self, item, column):
         part_no = item.text(column).strip().upper()
         self.current_part_no = part_no
+        
+        # 파트 정보 표시 (modules.py에 구현된 함수)
         display_part_info(part_no, self)
+        
+        # 이미지 로드
         self.load_image_for_current_part()
+        
+        # JSON에 저장된 메모 불러오기
+        if part_no in self.memo_data:
+            self.memoText.setPlainText(self.memo_data[part_no])
+        else:
+            self.memoText.clear()
     
     def load_image_for_current_part(self):
         part_no = self.current_part_no
-        if part_no in image_dict:
-            image_path = image_dict[part_no]
+        # files_dict에서 "image" 키를 사용하여 이미지 경로 가져오기
+        if part_no in files_dict["image"]:
+            image_path = files_dict["image"][part_no]
             if os.path.exists(image_path):
                 pixmap = QPixmap(image_path)
                 if not pixmap.isNull():
@@ -229,8 +276,8 @@ class MainWindow(QMainWindow):
     def on_tree_item_double_clicked(self, item, column):
         part_no = item.text(column).strip().upper()
         if self.radio_image.isChecked():
-            if part_no in image_dict:
-                image_path = image_dict[part_no]
+            if part_no in files_dict["image"]:
+                image_path = files_dict["image"][part_no]
                 if os.path.exists(image_path):
                     QDesktopServices.openUrl(QUrl.fromLocalFile(image_path))
                 else:
@@ -238,8 +285,8 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 이미지가 없습니다.")
         elif self.radio_3dxml.isChecked():
-            if part_no in xml3d_dict:
-                xml_path = xml3d_dict[part_no]
+            if part_no in files_dict["xml3d"]:
+                xml_path = files_dict["xml3d"][part_no]
                 if os.path.exists(xml_path):
                     try:
                         cmd = f'cmd /c start "" "{xml_path}"'
@@ -250,25 +297,52 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "경고", "3DXML 파일이 존재하지 않습니다.")
             else:
                 QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 3DXML 파일이 없습니다.")
+        elif self.radio_fbx.isChecked():
+            if part_no in files_dict["fbx"]:
+                fbx_path = files_dict["fbx"][part_no]
+                if os.path.exists(fbx_path):
+                    try:
+                        cmd = f'cmd /c start "" "{fbx_path}"'
+                        subprocess.run(cmd, shell=True, check=True)
+                    except Exception as e:
+                        QMessageBox.warning(self, "에러", f"FBX 파일 실행 오류: {str(e)}")
+                else:
+                    QMessageBox.warning(self, "경고", "FBX 파일이 존재하지 않습니다.")
+            else:
+                QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 FBX 파일이 없습니다.")
     
     def on_save_memo(self):
-        current_node = self.current_part_no if self.current_part_no else "None"
+        """
+        Save Memo 버튼 클릭 시, 
+        현재 선택된 파트 번호( self.current_part_no )를 
+        JSON 파일(self.memo_data)에 저장.
+        """
+        if not self.current_part_no:
+            QMessageBox.warning(self, "경고", "먼저 파트를 선택하세요.")
+            return
+
         memo_content = self.memoText.toPlainText()
-        print(f"Current Node: {current_node}, Memo: {memo_content}")
-        self.appendLog(f"Saved Memo - Node: {current_node}, Memo: {memo_content}")
+        self.memo_data[self.current_part_no] = memo_content
+        self.save_memo_data()
+        self.appendLog(f"Saved Memo - Node: {self.current_part_no}, Memo: {memo_content}")
 
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
-    window.show()
     
     base_path = get_base_path()
     excelfolder_path = os.path.join(base_path, "01_excel")
     excel_file_path = os.path.join(excelfolder_path, "data.xlsx")
     
+    # JSON 파일 경로 지정
+    json_file_path = os.path.join(base_path, "memo.json")
+    window.json_file_path = json_file_path
+    window.load_memo_data()
+
     if os.path.exists(excel_file_path):
         build_tree_view(excel_file_path, window)
     
+    window.show()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

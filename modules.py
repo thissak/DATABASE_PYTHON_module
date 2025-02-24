@@ -12,8 +12,13 @@ from PyQt5.QtGui import QDesktopServices
 # ─────────────────────────────────────────────────────────────
 nodeCount = 0
 g_NodeDictionary = {}  # 파트넘버 -> 트리 아이템
-image_dict = {}        # 파트넘버 -> 이미지 파일 경로
-xml3d_dict = {}        # 3DXML 파일 경로 저장
+
+# 파일 관련 딕셔너리를 중첩 구조로 관리
+files_dict = {
+    "image": {},   # 파트넘버 -> 이미지 파일 경로
+    "xml3d": {},   # 파트넘버 -> 3DXML 파일 경로
+    "fbx": {}      # 파트넘버 -> FBX 파일 경로
+}
 
 def get_base_path():
     """실행 파일(또는 스크립트)이 있는 폴더를 반환"""
@@ -25,10 +30,9 @@ def build_xml3d_dict(window):
     """
     02_3dxml 폴더에서 .3dxml 파일을 스캔하여,
     파일명 예: aaa_bbb_ccc_PARTNO.3dxml 의 형식이라고 가정하고,
-    PARTNO를 추출하여 xml3d_dict[PARTNO] = 파일 경로 로 저장.
+    PARTNO를 추출하여 files_dict["xml3d"][PARTNO] = 파일 경로 로 저장.
     """
-    xml3d_dict.clear()  # 기존 데이터 초기화
-
+    files_dict["xml3d"].clear()  # 기존 데이터 초기화
     base_path = get_base_path()  
     folder_path = os.path.join(base_path, "02_3dxml")  # 3DXML 파일 폴더
 
@@ -41,20 +45,19 @@ def build_xml3d_dict(window):
         if lower_name.endswith(".3dxml"):
             file_parts = fname.split("_")
             if len(file_parts) >= 4:
+                # 파일 확장자 제거 후 대문자로 변환하여 파트넘버 추출
                 part_number = os.path.splitext(file_parts[3])[0].upper()
-                if part_number not in xml3d_dict:
-                    xml3d_dict[part_number] = os.path.join(folder_path, fname)
-    # 개별 로그 출력 대신 build_tree_view()에서 최종 요약에 포함합니다.
+                if part_number not in files_dict["xml3d"]:
+                    files_dict["xml3d"][part_number] = os.path.join(folder_path, fname)
 
 def build_image_dict(window):
     """
     00_image 폴더에서 PNG/JPG 파일을 스캔하여,
     파일명 예: aaa_bbb_ccc_PARTNO.png 의 형식이라고 가정하고,
-    PARTNO를 추출하여 image_dict[PARTNO] = 파일 경로 로 저장.
+    PARTNO를 추출하여 files_dict["image"][PARTNO] = 파일 경로 로 저장.
     """
-    image_dict.clear() 
-    
-    base_path = get_base_path()  # 실행 파일이 있는 폴더 기준으로 경로 설정
+    files_dict["image"].clear() 
+    base_path = get_base_path()  # 실행 파일 기준
     folder_path = os.path.join(base_path, "00_image")
     
     if not os.path.exists(folder_path):
@@ -66,11 +69,32 @@ def build_image_dict(window):
         if lower_name.endswith(".png") or lower_name.endswith(".jpg"):
             file_parts = fname.split("_")
             if len(file_parts) >= 4:
-                # 파일 확장자를 제거하여 파트넘버를 추출합니다.
-                part_number = os.path.splitext(file_parts[3])[0]
-                if part_number not in image_dict:
-                    image_dict[part_number] = os.path.join(folder_path, fname)
-    # 개별 로그 출력 대신 build_tree_view()에서 최종 요약에 포함합니다.
+                part_number = os.path.splitext(file_parts[3])[0].upper()
+                if part_number not in files_dict["image"]:
+                    files_dict["image"][part_number] = os.path.join(folder_path, fname)
+
+def build_fbx_dict(window):
+    """
+    03_fbx 폴더에서 .fbx 파일을 스캔하여,
+    파일명 예: aaa_bbb_ccc_PARTNO.fbx 의 형식이라고 가정하고,
+    PARTNO를 추출하여 files_dict["fbx"][PARTNO] = 파일 경로 로 저장.
+    """
+    files_dict["fbx"].clear()
+    base_path = get_base_path()
+    folder_path = os.path.join(base_path, "03_fbx")
+    
+    if not os.path.exists(folder_path):
+        window.appendLog(f"[build_fbx_dict] 03_fbx 폴더를 찾을 수 없습니다: {folder_path}")
+        return
+    
+    for fname in os.listdir(folder_path):
+        lower_name = fname.lower()
+        if lower_name.endswith(".fbx"):
+            file_parts = fname.split("_")
+            if len(file_parts) >= 4:
+                part_number = os.path.splitext(file_parts[3])[0].upper()
+                if part_number not in files_dict["fbx"]:
+                    files_dict["fbx"][part_number] = os.path.join(folder_path, fname)
 
 def safe_int(value, default="nan"):
     """
@@ -140,7 +164,6 @@ def add_nodes_original(tree_widget, parent_item, dict_rel, node_keys):
             is_duplicate = True
         node_keys[new_key] = True
         
-        # QTreeWidgetItem을 직접 사용합니다.
         child_item = QTreeWidgetItem(parent_item)
         child_item.setText(0, child_key)
         g_NodeDictionary[child_key] = child_item
@@ -151,25 +174,29 @@ def add_nodes_original(tree_widget, parent_item, dict_rel, node_keys):
 
 def apply_tree_view_styles(tree_widget, style):
     """
-    라디오버튼 선택에 따라 트리뷰 스타일 적용
-    style: "image" 또는 "3dxml"
+    라디오버튼 선택에 따라 트리뷰 스타일 적용  
+    style: "image", "3dxml", "fbx" 중 하나
     """
     def recurse(item):
         part_no = item.text(0)
-        # 기본 스타일로 초기화 (볼드 해제 및 검정색)
+        # 기본 스타일: 볼드 해제 및 검정색
         font = item.font(0)
         font.setBold(False)
         item.setFont(0, font)
         item.setForeground(0, QBrush(QColor(0, 0, 0)))
         
-        if style == "image" and part_no in image_dict:
+        if style == "image" and part_no.upper() in files_dict["image"]:
             font.setBold(True)
             item.setFont(0, font)
             item.setForeground(0, QBrush(QColor(255, 0, 0)))  # 빨간색
-        elif style == "3dxml" and part_no in xml3d_dict:
+        elif style == "3dxml" and part_no.upper() in files_dict["xml3d"]:
             font.setBold(True)
             item.setFont(0, font)
             item.setForeground(0, QBrush(QColor(0, 0, 255)))  # 파란색
+        elif style == "fbx" and part_no.upper() in files_dict["fbx"]:
+            font.setBold(True)
+            item.setFont(0, font)
+            item.setForeground(0, QBrush(QColor(0, 128, 0)))  # 녹색
 
         for i in range(item.childCount()):
             recurse(item.child(i))
@@ -186,9 +213,10 @@ def build_tree_view(excel_path, window):
     global nodeCount, g_NodeDictionary
     start_time = time.time()
     
-    # 이미지 및 3DXML 딕셔너리 생성 (내부에서는 딕셔너리만 생성)
+    # 이미지, 3DXML, FBX 딕셔너리 생성
     build_image_dict(window)
     build_xml3d_dict(window)
+    build_fbx_dict(window)
     
     df = pd.read_excel(excel_path, sheet_name="Sheet1")
     if "PartNo" in df.columns and "NextPart" in df.columns:
@@ -246,10 +274,11 @@ def build_tree_view(excel_path, window):
     # 기본 스타일 적용 (예: 기본으로 이미지 스타일 적용)
     apply_tree_view_styles(window.tree, "image")
     
-    # 최종 요약정보에 딕셔너리 정보 포함
+    # 최종 요약정보
     summary_log = "===== Operation Summary =====\n"
-    summary_log += f"총 이미지 파일 수: {len(image_dict)}\n"
-    summary_log += f"총 3DXML 파일 수: {len(xml3d_dict)}\n"
+    summary_log += f"총 이미지 파일 수: {len(files_dict['image'])}\n"
+    summary_log += f"총 3DXML 파일 수: {len(files_dict['xml3d'])}\n"
+    summary_log += f"총 FBX 파일 수: {len(files_dict['fbx'])}\n"
     summary_log += f"총 유효 파트 수: {total_parts}\n"
     summary_log += f"트리뷰에 추가된 전체 노드 수: {nodeCount}\n"
     window.appendLog(summary_log)
