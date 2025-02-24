@@ -1,7 +1,7 @@
 import os
 import sys
 from PyQt5.QtWidgets import QApplication
-from ui import MainWindow
+from ui_functionality import MainWindow
 from tree_manager import get_base_path, build_tree_view
 
 def main():
@@ -14,7 +14,6 @@ def main():
     
     # JSON 파일 경로를 01_excel 폴더 내부로 지정
     json_file_path = os.path.join(excelfolder_path, "memo.json")
-    # 폴더가 없으면 생성
     if not os.path.exists(excelfolder_path):
         os.makedirs(excelfolder_path)
     
