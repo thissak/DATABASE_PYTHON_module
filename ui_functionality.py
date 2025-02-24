@@ -6,7 +6,7 @@ import datetime
 import subprocess
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from PyQt5.QtCore import QUrl, Qt
-from PyQt5.QtGui import QDesktopServices, QPixmap
+from PyQt5.QtGui import QDesktopServices, QPixmap, QIcon
 from ui import MainWindowUI  # UI 구성부
 # tree_widget 모듈에서 MyTreeWidget를 import
 from tree_widget import MyTreeWidget
@@ -62,41 +62,51 @@ class MainWindow(QMainWindow, MainWindowUI):
     
     def on_tree_item_double_clicked(self, item, column):
         part_no = item.text(column).strip().upper()
+        # 각 모드에 따른 파일 경로 선택
         if self.radio_image.isChecked():
             if part_no in files_dict["image"]:
-                image_path = files_dict["image"][part_no]
-                if os.path.exists(image_path):
-                    QDesktopServices.openUrl(QUrl.fromLocalFile(image_path))
-                else:
-                    QMessageBox.warning(self, "경고", "이미지 파일이 존재하지 않습니다.")
+                file_path = files_dict["image"][part_no]
             else:
-                QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 이미지가 없습니다.")
+                QMessageBox.warning(self, "죄송합니다.", "해당 파트넘버에 해당하는 이미지가 없습니다.")
+                return
         elif self.radio_3dxml.isChecked():
             if part_no in files_dict["xml3d"]:
-                xml_path = files_dict["xml3d"][part_no]
-                if os.path.exists(xml_path):
-                    try:
-                        cmd = f'cmd /c start "" "{xml_path}"'
-                        subprocess.run(cmd, shell=True, check=True)
-                    except Exception as e:
-                        QMessageBox.warning(self, "에러", f"3DXML 파일 실행 오류: {str(e)}")
-                else:
-                    QMessageBox.warning(self, "경고", "3DXML 파일이 존재하지 않습니다.")
+                file_path = files_dict["xml3d"][part_no]
             else:
-                QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 3DXML 파일이 없습니다.")
+                QMessageBox.warning(self, "죄송합니다.", "해당 파트넘버에 해당하는 3DXML 파일이 없습니다.")
+                return
         elif self.radio_fbx.isChecked():
             if part_no in files_dict["fbx"]:
-                fbx_path = files_dict["fbx"][part_no]
-                if os.path.exists(fbx_path):
-                    try:
-                        cmd = f'cmd /c start "" "{fbx_path}"'
-                        subprocess.run(cmd, shell=True, check=True)
-                    except Exception as e:
-                        QMessageBox.warning(self, "에러", f"FBX 파일 실행 오류: {str(e)}")
-                else:
-                    QMessageBox.warning(self, "경고", "FBX 파일이 존재하지 않습니다.")
+                file_path = files_dict["fbx"][part_no]
             else:
-                QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 FBX 파일이 없습니다.")
+                QMessageBox.warning(self, "죄송합니다.", "해당 파트넘버에 해당하는 FBX 파일이 없습니다.")
+                return
+        else:
+            return
+
+        if not os.path.exists(file_path):
+            QMessageBox.warning(self, "죄송합니다.", "파일이 존재하지 않습니다.")
+            return
+
+        # FILE 체크박스가 체크되어 있으면 파일을 실행하지 않고 탐색기에서 파일 위치를 보여줌.
+        if self.checkbox_file.isChecked():
+            try:
+                # explorer /select, "파일경로" 명령으로 파일이 선택된 상태의 폴더 열기
+                cmd = f'explorer /select,"{file_path}"'
+                subprocess.run(cmd, shell=True)
+            except Exception as e:
+                QMessageBox.warning(self, "에러", f"파일 위치 열기 오류: {str(e)}")
+        else:
+            # 체크박스 미체크 시 기존 동작 (파일 실행)
+            if self.radio_image.isChecked():
+                QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+            else:
+                try:
+                    cmd = f'cmd /c start "" "{file_path}"'
+                    subprocess.run(cmd, shell=True, check=True)
+                except Exception as e:
+                    QMessageBox.warning(self, "에러", f"파일 실행 오류: {str(e)}")
+
     
     def load_image_for_current_part(self):
         part_no = self.current_part_no

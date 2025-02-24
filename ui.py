@@ -1,9 +1,10 @@
 # ui.py
 from PyQt5.QtWidgets import (
     QMainWindow, QTreeWidget, QTextEdit, QVBoxLayout, QHBoxLayout,
-    QWidget, QLabel, QRadioButton, QGroupBox, QPushButton, QSpacerItem, QSizePolicy
-)
+    QWidget, QLabel, QRadioButton, QGroupBox, QPushButton, QSpacerItem, QSizePolicy, QCheckBox,
+    )
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QFont, QFontMetrics
 from tree_widget import MyTreeWidget
 
 # 클릭 가능한 QLabel
@@ -57,33 +58,54 @@ class MainWindowUI:
         self.radio_3dxml = QRadioButton("3DXML", MainWindow)
         self.radio_fbx = QRadioButton("FBX", MainWindow)
         self.radio_image.setChecked(True)
-        
+
         self.filter_button = QPushButton("Filter", MainWindow)
         self.filter_button.setCheckable(True)
         self.filter_button.setMinimumSize(130, 40)
         self.filter_button.setStyleSheet(self.button_style)
-        
+
         # 라디오 버튼 가로 레이아웃
         radio_layout = QHBoxLayout()
         radio_layout.addWidget(self.radio_image)
         radio_layout.addWidget(self.radio_3dxml)
         radio_layout.addWidget(self.radio_fbx)
+        radio_layout.setSpacing(35)
         radio_layout.setAlignment(Qt.AlignCenter)
-        
-        # 필터 버튼 중앙 정렬 레이아웃
+
+        # FILE 체크박스 생성 (예: "Show in Explorer" 이름 사용)
+        self.checkbox_file = QCheckBox("Show in Explorer", MainWindow)
+        self.checkbox_file.setChecked(False)
+
+        # 현재 폰트를 복사해서 bold 폰트로 변경한 후, 텍스트 너비를 측정하여 고정 너비 설정
+        font = self.checkbox_file.font()
+        bold_font = QFont(font)
+        bold_font.setBold(True)
+        fm = QFontMetrics(bold_font)
+        self.checkbox_file.setFixedWidth(fm.horizontalAdvance(self.checkbox_file.text()) + 30)
+
+        # toggled 시 체크 여부에 따라 폰트 굵기를 변경
+        self.checkbox_file.toggled.connect(
+            lambda checked: self.checkbox_file.setStyleSheet("font-weight: bold;" if checked else "font-weight: normal;")
+        )
+
+        # Filter 버튼과 FILE 체크박스를 같은 행에 배치
         filter_layout = QHBoxLayout()
         filter_layout.addStretch()
         filter_layout.addWidget(self.filter_button)
+        filter_layout.addSpacing(10)
+        filter_layout.addWidget(self.checkbox_file)
         filter_layout.addStretch()
-        
+
+        # 상단 라디오 버튼과 하단 Filter+FILE 레이아웃을 수직으로 배치
         radio_main_layout = QVBoxLayout()
         radio_main_layout.addLayout(radio_layout)
         radio_main_layout.addLayout(filter_layout)
-        
+
         self.radio_group = QGroupBox("Select mode", MainWindow)
         self.radio_group.setStyleSheet(self.qgroupbox_style)
         self.radio_group.setFixedHeight(180)
         self.radio_group.setLayout(radio_main_layout)
+
         
         # ─── 메모 그룹 ─────────────────────────────────────────
         self.memo_group = QGroupBox("Memo", MainWindow)
