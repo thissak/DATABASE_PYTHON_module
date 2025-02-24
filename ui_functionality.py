@@ -8,13 +8,15 @@ from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from PyQt5.QtCore import QUrl, Qt
 from PyQt5.QtGui import QDesktopServices, QPixmap
 from ui import MainWindowUI  # UI 구성부
-
+# tree_widget 모듈에서 MyTreeWidget를 import
+from tree_widget import MyTreeWidget
 from tree_manager import files_dict, display_part_info, apply_tree_view_styles
 
 class MainWindow(QMainWindow, MainWindowUI):
     def __init__(self):
         super().__init__()
         self.setupUi(self)  # UI 구성부 설정
+
         # 기능 구현부 초기화
         self.current_part_no = None           # 현재 선택된 파트넘버
         self.memo_data = {}                   # { 파트번호: [ { "memo": 내용, "timestamp": 시간 }, ... ] }

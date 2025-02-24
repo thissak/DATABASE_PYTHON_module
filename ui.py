@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget, QLabel, QRadioButton, QGroupBox, QPushButton, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from tree_widget import MyTreeWidget
 
 # 클릭 가능한 QLabel
 class ClickableLabel(QLabel):
@@ -20,7 +21,7 @@ class MainWindowUI:
         MainWindow.resize(1000, 1600)
         
         # ─── 좌측: 트리뷰 + 로그창 ──────────────────────────────
-        self.tree = QTreeWidget(MainWindow)
+        self.tree = MyTreeWidget(self)
         self.tree.setColumnCount(1)
         self.tree.setHeaderLabels(["FA-50M FINAL ASSEMBLY VERSION POLAND"])
         
@@ -31,6 +32,7 @@ class MainWindowUI:
         leftLayout = QVBoxLayout()
         leftLayout.addWidget(self.tree, 3)
         leftLayout.addWidget(self.logText, 1)
+        leftLayout.setSpacing(25)
         leftWidget = QWidget()
         leftWidget.setLayout(leftLayout)
         
@@ -102,7 +104,10 @@ class MainWindowUI:
         # 버튼 레이아웃 (Save Memo, Clear Memo)
         button_layout = QHBoxLayout()
         self.memoSaveButton = QPushButton("Save Memo", MainWindow)
+        self.memoSaveButton.setStyleSheet(self.button_style)
+
         self.memoClearButton = QPushButton("Clear Memo", MainWindow)
+        self.memoClearButton.setStyleSheet(self.button_style)
         button_layout.addWidget(self.memoSaveButton)
         button_layout.addWidget(self.memoClearButton)
         
@@ -117,7 +122,7 @@ class MainWindowUI:
         rightLayout.addWidget(self.imageLabel)
         rightLayout.addWidget(self.radio_group)
         rightLayout.addWidget(self.memo_group)
-        rightLayout.setSpacing(30)  # 우측 그룹 간 간격
+        rightLayout.setSpacing(25)  # 우측 그룹 간 간격
 
         # ─── 보이지 않는 SpacerItem 추가 (하단 공간 차지 → 위젯을 위로 올림)
         spacer = QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding)
