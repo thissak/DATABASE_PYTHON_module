@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import pandas as pd
-from PyQt5.QtWidgets import QTreeWidgetItem, QMessageBox, QHeaderView  # QTreeWidgetItem import 추가
+from PyQt5.QtWidgets import QTreeWidgetItem, QMessageBox, QHeaderView
 from PyQt5.QtGui import QPixmap, QBrush, QColor
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
@@ -34,8 +34,8 @@ def build_xml3d_dict(window):
     """
     files_dict["xml3d"].clear()  # 기존 데이터 초기화
     base_path = get_base_path()  
-    folder_path = os.path.join(base_path, "02_3dxml")  # 3DXML 파일 폴더
-
+    folder_path = os.path.join(base_path, "02_3dxml")
+    
     if not os.path.exists(folder_path):
         window.appendLog(f"[build_xml3d_dict] 02_3dxml 폴더를 찾을 수 없습니다: {folder_path}")
         return
@@ -45,7 +45,6 @@ def build_xml3d_dict(window):
         if lower_name.endswith(".3dxml"):
             file_parts = fname.split("_")
             if len(file_parts) >= 4:
-                # 파일 확장자 제거 후 대문자로 변환하여 파트넘버 추출
                 part_number = os.path.splitext(file_parts[3])[0].upper()
                 if part_number not in files_dict["xml3d"]:
                     files_dict["xml3d"][part_number] = os.path.join(folder_path, fname)
@@ -56,8 +55,8 @@ def build_image_dict(window):
     파일명 예: aaa_bbb_ccc_PARTNO.png 의 형식이라고 가정하고,
     PARTNO를 추출하여 files_dict["image"][PARTNO] = 파일 경로 로 저장.
     """
-    files_dict["image"].clear() 
-    base_path = get_base_path()  # 실행 파일 기준
+    files_dict["image"].clear()
+    base_path = get_base_path()
     folder_path = os.path.join(base_path, "00_image")
     
     if not os.path.exists(folder_path):
@@ -123,7 +122,7 @@ def display_part_info(part_no, window):
         
         row = df[df["Part No"].str.strip() == part_no]
         if row.empty:
-            window.appendLog(f"해당하는 '{part_no}' 값을 D열에서 찾을 수 없습니다.")
+            window.appendLog(f"해당하는 '{part_no}' 값을 찾을 수 없습니다.")
             return
         
         row = row.iloc[0]
@@ -140,8 +139,11 @@ def display_part_info(part_no, window):
             f"Qty: {safe_int(row.get('Qty', 'N/A'))}\n"
             f"NextPart: {row.get('NextPart', 'N/A')}"
         )
+        # 줄바꿈(\n)을 <br>로 변환
+        formatted_metadata = metadataStr.replace('\n', '<br>')
+        formatted_html = f"<b>{formatted_metadata}</b>"
         window.logText.clear()
-        window.appendLog(metadataStr)
+        window.logText.setHtml(formatted_html)
     except Exception as e:
         window.appendLog("에러 발생: " + str(e))
 
@@ -168,6 +170,7 @@ def add_nodes_original(tree_widget, parent_item, dict_rel, node_keys):
         child_item.setText(0, child_key)
         g_NodeDictionary[child_key] = child_item
         
+        global nodeCount
         nodeCount += 1
         if not is_duplicate:
             add_nodes_original(tree_widget, child_item, dict_rel, node_keys)
@@ -197,7 +200,7 @@ def apply_tree_view_styles(tree_widget, style):
             font.setBold(True)
             item.setFont(0, font)
             item.setForeground(0, QBrush(QColor(0, 128, 0)))  # 녹색
-
+        
         for i in range(item.childCount()):
             recurse(item.child(i))
     
@@ -213,7 +216,7 @@ def build_tree_view(excel_path, window):
     global nodeCount, g_NodeDictionary
     start_time = time.time()
     
-    # 이미지, 3DXML, FBX 딕셔너리 생성
+    # 이미지, 3DXML, FBX 파일 정보 딕셔너리 갱신
     build_image_dict(window)
     build_xml3d_dict(window)
     build_fbx_dict(window)
@@ -271,10 +274,10 @@ def build_tree_view(excel_path, window):
     root_item.setExpanded(True)
     
     add_nodes_original(window.tree, root_item, dict_rel, node_keys)
-    # 기본 스타일 적용 (예: 기본으로 이미지 스타일 적용)
+    # 기본 스타일 적용 (초기에는 image 스타일 적용)
     apply_tree_view_styles(window.tree, "image")
     
-    # 최종 요약정보
+    # 최종 요약정보 작성
     summary_log = "===== Operation Summary =====\n"
     summary_log += f"총 이미지 파일 수: {len(files_dict['image'])}\n"
     summary_log += f"총 3DXML 파일 수: {len(files_dict['xml3d'])}\n"

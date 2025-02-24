@@ -2,23 +2,18 @@ import os
 import sys
 import json
 import subprocess
-import pandas as pd
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QTreeWidget, QTreeWidgetItem,
-    QTextEdit, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QMessageBox,
-    QRadioButton, QGroupBox, QPushButton
+    QMainWindow, QTreeWidget, QTextEdit, QVBoxLayout, QHBoxLayout,
+    QWidget, QLabel, QMessageBox, QRadioButton, QGroupBox, QPushButton
 )
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices
 
-# modules.py에서 필요한 함수와 전역 변수 가져오기
-from modules import (
-    get_base_path, build_tree_view, files_dict, display_part_info, apply_tree_view_styles
-)
+from tree_manager import files_dict, display_part_info, apply_tree_view_styles
 
 # ─────────────────────────────────────────────────────────────
-# ClickableLabel: 클릭 이벤트를 처리할 수 있는 QLabel 하위 클래스
+# ClickableLabel: 클릭 이벤트 처리가 가능한 QLabel 하위 클래스
 # ─────────────────────────────────────────────────────────────
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()
@@ -28,22 +23,21 @@ class ClickableLabel(QLabel):
         super().mousePressEvent(event)
 
 # ─────────────────────────────────────────────────────────────
-# MyTreeWidget: 드래그앤드롭 및 노드 검색 기능 제공
+# MyTreeWidget: 드래그 앤 드롭 및 노드 검색 기능 제공
 # ─────────────────────────────────────────────────────────────
 class MyTreeWidget(QTreeWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setDragEnabled(True)
-
+    
     def mouseDoubleClickEvent(self, event):
-        """더블 클릭 시 기본 노드 확장/축소 기능을 막고, 사용자 정의 이벤트만 실행"""
         item = self.itemAt(event.pos())
         if item:
             main_window = self.window()
             if hasattr(main_window, "on_tree_item_double_clicked"):
                 main_window.on_tree_item_double_clicked(item, 0)
-        event.ignore()  # 기본 동작(노드 확장/축소) 방지
+        event.ignore()
     
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -91,7 +85,7 @@ class MyTreeWidget(QTreeWidget):
         return None
 
 # ─────────────────────────────────────────────────────────────
-# MainWindow: 트리뷰, 로그창, 이미지 패널, 라디오 버튼 및 메모창 포함
+# MainWindow: 메인 윈도우 (트리뷰, 로그창, 이미지 패널, 라디오 버튼, 메모창)
 # ─────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -99,12 +93,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Parts Treeview + Drag&Drop + Image Panel")
         self.resize(1000, 1600)
         
-        self.current_part_no = None  # 현재 선택된 파트넘버
-        
-        # 메모 데이터(파트번호: 메모)를 저장할 딕셔너리
-        self.memo_data = {}
-        # JSON 파일 경로
-        self.json_file_path = None
+        self.current_part_no = None   # 현재 선택된 파트넘버
+        self.memo_data = {}           # 메모 저장용 딕셔너리 (파트번호: 메모)
+        self.json_file_path = None    # JSON 파일 경로
+        self.df = None                # Excel 데이터 (나중에 build_tree_view에서 설정)
         
         self.init_ui()
     
@@ -126,7 +118,7 @@ class MainWindow(QMainWindow):
         leftWidget = QWidget()
         leftWidget.setLayout(leftLayout)
         
-        # 우측: 이미지 패널, 라디오버튼, 메모창
+        # 우측: 이미지 패널, 라디오 버튼, 메모창
         self.imageLabel = ClickableLabel("이미지가 여기에 표시됩니다.", self)
         self.imageLabel.setAlignment(Qt.AlignHCenter | Qt.AlignCenter)
         self.imageLabel.setStyleSheet("border: 1px solid gray;")
@@ -153,7 +145,7 @@ class MainWindow(QMainWindow):
         self.radio_group.setFixedHeight(150)
         radio_layout = QHBoxLayout()
         radio_layout.setContentsMargins(5, 5, 5, 5)
-        radio_layout.setSpacing(75)
+        radio_layout.setSpacing(50)
         radio_layout.addWidget(self.radio_image)
         radio_layout.addWidget(self.radio_3dxml)
         radio_layout.addWidget(self.radio_fbx)
@@ -187,15 +179,9 @@ class MainWindow(QMainWindow):
         centralWidget = QWidget()
         centralWidget.setLayout(mainLayout)
         self.setCentralWidget(centralWidget)
-
-    # ─────────────────────────────────────────────────────────────
+    
     # JSON 로드/저장 메서드
-    # ─────────────────────────────────────────────────────────────
     def load_memo_data(self):
-        """
-        JSON 파일이 없으면 생성하고,
-        있으면 불러와서 self.memo_data 딕셔너리에 저장
-        """
         if not os.path.exists(self.json_file_path):
             with open(self.json_file_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f, ensure_ascii=False, indent=4)
@@ -203,20 +189,15 @@ class MainWindow(QMainWindow):
         else:
             with open(self.json_file_path, 'r', encoding='utf-8') as f:
                 self.memo_data = json.load(f)
-
+    
     def save_memo_data(self):
-        """
-        self.memo_data를 JSON 파일로 저장
-        """
         try:
             with open(self.json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.memo_data, f, ensure_ascii=False, indent=4)
         except Exception as e:
             QMessageBox.critical(self, "에러", f"JSON 파일 저장 중 오류: {str(e)}")
-
-    # ─────────────────────────────────────────────────────────────
-    # 슬롯 및 기타 메서드
-    # ─────────────────────────────────────────────────────────────
+    
+    # 슬롯 함수들 (라디오 버튼, 트리 아이템 클릭/더블클릭, 이미지 로드, 메모 저장)
     def on_radio_image_clicked(self, checked):
         if checked:
             apply_tree_view_styles(self.tree, "image")
@@ -235,14 +216,8 @@ class MainWindow(QMainWindow):
     def on_tree_item_clicked(self, item, column):
         part_no = item.text(column).strip().upper()
         self.current_part_no = part_no
-        
-        # 파트 정보 표시 (modules.py에 구현된 함수)
         display_part_info(part_no, self)
-        
-        # 이미지 로드
         self.load_image_for_current_part()
-        
-        # JSON에 저장된 메모 불러오기
         if part_no in self.memo_data:
             self.memoText.setPlainText(self.memo_data[part_no])
         else:
@@ -250,7 +225,6 @@ class MainWindow(QMainWindow):
     
     def load_image_for_current_part(self):
         part_no = self.current_part_no
-        # files_dict에서 "image" 키를 사용하여 이미지 경로 가져오기
         if part_no in files_dict["image"]:
             image_path = files_dict["image"][part_no]
             if os.path.exists(image_path):
@@ -312,38 +286,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "경고", "해당 파트넘버에 해당하는 FBX 파일이 없습니다.")
     
     def on_save_memo(self):
-        """
-        Save Memo 버튼 클릭 시, 
-        현재 선택된 파트 번호( self.current_part_no )를 
-        JSON 파일(self.memo_data)에 저장.
-        """
         if not self.current_part_no:
             QMessageBox.warning(self, "경고", "먼저 파트를 선택하세요.")
             return
-
         memo_content = self.memoText.toPlainText()
         self.memo_data[self.current_part_no] = memo_content
         self.save_memo_data()
         self.appendLog(f"Saved Memo - Node: {self.current_part_no}, Memo: {memo_content}")
-
-def main():
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    
-    base_path = get_base_path()
-    excelfolder_path = os.path.join(base_path, "01_excel")
-    excel_file_path = os.path.join(excelfolder_path, "data.xlsx")
-    
-    # JSON 파일 경로 지정
-    json_file_path = os.path.join(base_path, "memo.json")
-    window.json_file_path = json_file_path
-    window.load_memo_data()
-
-    if os.path.exists(excel_file_path):
-        build_tree_view(excel_file_path, window)
-    
-    window.show()
-    sys.exit(app.exec_())
-
-if __name__ == "__main__":
-    main()
